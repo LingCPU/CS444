@@ -20,5 +20,7 @@ void matrixUpperTriangularInverse(float* A, int rows, int cols, float* invA);
 
 void matrixInternalCameraParameters(float* p,int rows,int cols,float* k);
 
+void matrixQR(float* A, int rows, int cols, float* Q, float* R);
+
 #endif
 

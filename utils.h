@@ -16,5 +16,7 @@ void vectorSubtract(float* u, float* v, int rows, float* w);
 
 float vectorNorm(float* u, int rows);
 
+void buildMMatrix(float* m, int numPoints, float* x, float* y, float* z, int rows, int cols);
+
 #endif
 
