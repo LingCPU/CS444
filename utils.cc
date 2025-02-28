@@ -42,39 +42,3 @@ float vectorNorm(float* u, int rows){
   return sqrt(vectorDotProduct(u, u, rows));
 }
 
-void buildMMatrix(float* m, int numPoints, float* x, float* y, float* z, int rows, int cols){
-  int row = 0;
-  for(int i = 0; i < numPoints; i++){
-    // For the first row of each point:
-    for(int j = 0; j < 4; j++){
-      if(j == 0) m[row * cols + j] = x[i];
-      if(j == 1) m[row * cols + j] = y[i];
-      if(j == 2) m[row * cols + j] = z[i];
-      if(j == 3) m[row * cols + j] = 1.0;
-    }
-    for(int j = 4; j < cols; j++){
-      m[row * cols + j] = 0.0;
-    }
-    row++;
-
-    // for the 2nd row of each point:
-    for(int j = 0; j < 8; j++){
-      m[row * cols + j] = 0.0;
-    }
-    for(int j = 4; j < 8; j++){
-      if(j == 4) m[row*cols + j] = x[i];
-      if(j == 5) m[row*cols + j] = y[i];
-      if(j == 6) m[row*cols + j] = z[i];
-      if(j == 7) m[row*cols + j] = 1.0;
-    }
-    for(int j = 4; j < cols; j++){
-      m[row * cols + j] = 0.0;
-    }
-    row++;
-
-    // for the 3rd row of each point:
-    for(int j = 0; j < 8; j++){
-      m[row * cols + j] = 0.0;
-    }
-  }
-}
