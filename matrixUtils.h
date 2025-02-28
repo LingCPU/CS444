@@ -4,6 +4,8 @@
 
 using namespace std;
 
+void matrixQR(float* A, int rows, int cols, float* Q, float* R);
+
 void matrixPrint(float* matrix, int rows, int cols);  
 
 void matrixProduct(float* a, int rows_a, int cols_a, float* b, int rows_b, int cols_b, float* c); 
@@ -19,8 +21,6 @@ void matrixBackSubstitution(float* R, int rows, int cols, float* d, float* p);
 void matrixUpperTriangularInverse(float* A, int rows, int cols, float* invA);
 
 void matrixInternalCameraParameters(float* p,int rows,int cols,float* k);
-
-void matrixQR(float* A, int rows, int cols, float* Q, float* R);
 
 #endif
 

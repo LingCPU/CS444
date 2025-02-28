@@ -8,6 +8,7 @@
 #include <string>
 #include <sstream>
 #include "utils.h"
+#include "matrixUtils.h"
 
 using namespace std;
 
