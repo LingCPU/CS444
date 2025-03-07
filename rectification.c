@@ -6,29 +6,33 @@
 #include "utils.h"
 #include "matrixUtils.h"
 
-void normalizeVector(float* v, int size) {
+/*
+ * Stereo Image Rectification Algorithm
+ * Based on the algorithm described in the provided paper
+ */
+
+void normalizeVector(float* v, int size){
     float norm = 0.0;
-    for (int i = 0; i < size; i++) {
+    for(int i = 0; i < size; i++){
         norm += v[i] * v[i];
     }
     norm = sqrt(norm);
     
-    if (norm > 1e-10) { // Avoid division by zero
-        for (int i = 0; i < size; i++) {
+    if(norm > 1e-10){ // Avoid division by zero
+        for(int i = 0; i < size; i++){
             v[i] /= norm;
         }
     }
 }
 
-void crossProduct(float* a, float* b, float* result) {
+void crossProduct(float* a, float* b, float* result){
     result[0] = a[1] * b[2] - a[2] * b[1];
     result[1] = a[2] * b[0] - a[0] * b[2];
     result[2] = a[0] * b[1] - a[1] * b[0];
 }
 
-void buildRrectMatrix(float* T, float* Rrect) {
+void buildRrectMatrix(float* T, float* Rrect){
     float e1[3], e2[3], e3[3];
-    float opticalAxis[3] = {0, 0, 1}; // Direction of optical axis
     
     // e1 = T / ||T|| (normalized translation vector)
     memcpy(e1, T, 3 * sizeof(float));
@@ -36,11 +40,11 @@ void buildRrectMatrix(float* T, float* Rrect) {
     
     // e2 = 1/sqrt(Tx^2 + Ty^2) * [-Ty, Tx, 0]
     float denominator = sqrt(T[0]*T[0] + T[1]*T[1]);
-    if (denominator > 1e-10) { // Avoid division by zero
+    if(denominator > 1e-10){ // Avoid division by zero
         e2[0] = -T[1] / denominator;
         e2[1] = T[0] / denominator;
         e2[2] = 0.0;
-    } else {
+    } else{
         // Handle the case where T is along Z-axis
         e2[0] = 1.0;
         e2[1] = 0.0;
@@ -51,7 +55,7 @@ void buildRrectMatrix(float* T, float* Rrect) {
     crossProduct(e1, e2, e3);
     
     // Build the Rrect matrix as [e1^T; e2^T; e3^T]
-    for (int i = 0; i < 3; i++) {
+    for(int i = 0; i < 3; i++){
         Rrect[i*3 + 0] = e1[i];
         Rrect[i*3 + 1] = e2[i];
         Rrect[i*3 + 2] = e3[i];
@@ -63,7 +67,7 @@ void buildRrectMatrix(float* T, float* Rrect) {
     matrixTranspose(RrectTemp, 3, 3, Rrect);
 }
 
-void rectifyPoint(float* R, float f, float* p, float* p_rectified) {
+void rectifyPoint(float* R, float f, float* p, float* p_rectified){
     float rotated[3];
     
     // Compute R*p
@@ -79,7 +83,7 @@ void rectifyPoint(float* R, float f, float* p, float* p_rectified) {
 void rectifyStereoSystem(float* R, float* T, float f, 
                         float** leftPoints, float** rightPoints, 
                         int numPoints, 
-                        float** leftRectified, float** rightRectified) {
+                        float** leftRectified, float** rightRectified){
     // Step 1: Build the Rrect matrix
     float Rrect[9];
     buildRrectMatrix(T, Rrect);
@@ -99,28 +103,28 @@ void rectifyStereoSystem(float* R, float* T, float f,
     matrixPrint(Rr, 3, 3);
     
     // Steps 3 & 4: Rectify each point in both cameras
-    for (int i = 0; i < numPoints; i++) {
+    for(int i = 0; i < numPoints; i++){
         rectifyPoint(Rl, f, leftPoints[i], leftRectified[i]);
         rectifyPoint(Rr, f, rightPoints[i], rightRectified[i]);
     }
 }
 
-float** allocate2DArray(int rows, int cols) {
+float** allocate2DArray(int rows, int cols){
     float** array = (float**)malloc(rows * sizeof(float*));
-    for (int i = 0; i < rows; i++) {
+    for(int i = 0; i < rows; i++){
         array[i] = (float*)malloc(cols * sizeof(float));
     }
     return array;
 }
 
-void free2DArray(float** array, int rows) {
-    for (int i = 0; i < rows; i++) {
+void free2DArray(float** array, int rows){
+    for(int i = 0; i < rows; i++){
         free(array[i]);
     }
     free(array);
 }
 
-void testRectificationAlgorithm() {
+void testRectificationAlgorithm(){
     // Example parameters
     float f = 500.0; // Focal length in pixels
     
@@ -142,7 +146,7 @@ void testRectificationAlgorithm() {
     float** rightRectified = allocate2DArray(numPoints, 3);
     
     // Initialize some example points
-    for (int i = 0; i < numPoints; i++) {
+    for(int i = 0; i < numPoints; i++){
         leftPoints[i][0] = 100.0 + i * 50.0;  // x
         leftPoints[i][1] = 100.0 + i * 20.0;  // y
         leftPoints[i][2] = f;                 // z = f for normalized coordinates
@@ -160,7 +164,7 @@ void testRectificationAlgorithm() {
     printf("%-15s %-15s %-15s %-15s %-15s %-15s\n", 
            "Left X", "Left Y", "Right X", "Right Y", "Rect Left Y", "Rect Right Y");
     
-    for (int i = 0; i < numPoints; i++) {
+    for(int i = 0; i < numPoints; i++){
         printf("%-15.2f %-15.2f %-15.2f %-15.2f %-15.2f %-15.2f\n",
                leftPoints[i][0], leftPoints[i][1],
                rightPoints[i][0], rightPoints[i][1],
@@ -169,7 +173,7 @@ void testRectificationAlgorithm() {
     
     // Check if y-coordinates are aligned (should be the same in rectified images)
     printf("\nVerification - differences in rectified y-coordinates:\n");
-    for (int i = 0; i < numPoints; i++) {
+    for(int i = 0; i < numPoints; i++){
         float diff = leftRectified[i][1] - rightRectified[i][1];
         printf("Point %d: diff = %.6f\n", i, diff);
     }

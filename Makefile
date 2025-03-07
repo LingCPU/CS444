@@ -8,11 +8,11 @@ CFLAGS = -Wall
 CALIB_SRCS = calib.cc readParams.cc readData.cc utils.cc matrixUtils.cc
 
 # Source files for rectification test
-RECT_SRCS = rectification.c utils.cc matrixUtils.cc
+RECT_SRCS = rectification_main.c rectification.c utils.cc matrixUtils.cc
 
-# Object files (replace .cc with .o)
+# Object files
 CALIB_OBJS = $(CALIB_SRCS:.cc=.o)
-RECT_OBJS = $(RECT_SRCS:.c=.o) $(RECT_SRCS:.cc=.o)
+RECT_OBJS = rectification_main.o rectification.o utils.o matrixUtils.o
 
 # Output executables
 CALIB_TARGET = calib
@@ -39,7 +39,7 @@ $(RECT_TARGET): $(RECT_OBJS)
 
 # Clean rule
 clean:
-	rm -f $(CALIB_OBJS) $(RECT_OBJS) $(CALIB_TARGET) $(RECT_TARGET)
+	rm -f *.o $(CALIB_TARGET) $(RECT_TARGET)
 
 # Run the calibration program
 run-calib: $(CALIB_TARGET)

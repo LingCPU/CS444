@@ -5,7 +5,7 @@
 #include "utils.h"
 #include "matrixUtils.h"
 
-int main() {
+int main(int argc, char *argv[]){
     printf("=== Stereo Image Rectification Test ===\n\n");
     testRectificationAlgorithm();
     printf("\n=== Test Complete ===\n");
