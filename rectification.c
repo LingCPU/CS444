@@ -126,35 +126,32 @@ void free2DArray(float** array, int rows){
 
 void testRectificationAlgorithm(){
     // Example parameters
-    float f = 500.0; // Focal length in pixels
+    float f = 560.0; // Focal length in pixels
     
     // Rotation between left and right cameras - small rotation for testing
-    float R[9] = {   
-        0.9998, 0.0175, -0.0087,
-        -0.0175, 0.9998, -0.0087,
-        0.0087, 0.0087, 0.9999
+    float R[9] = {
+        0.9998, -0.0175, 0.0087,
+        0.0175,  0.9998, 0.0087,
+        -0.0087, -0.0087, 0.9999
     };
     
     // Translation (baseline along X-axis, 100 pixels)
     float T[3] = {-100.0, 0.0, 0.0}; 
     
     // Example points (3D homogeneous coordinates)
-    int numPoints = 5;
+    int numPoints = 8;
     float** leftPoints = allocate2DArray(numPoints, 3);
     float** rightPoints = allocate2DArray(numPoints, 3);
     float** leftRectified = allocate2DArray(numPoints, 3);
     float** rightRectified = allocate2DArray(numPoints, 3);
     
-    // Initialize some example points
-    for(int i = 0; i < numPoints; i++){
-        leftPoints[i][0] = 100.0 + i * 50.0;  // x
-        leftPoints[i][1] = 100.0 + i * 20.0;  // y
-        leftPoints[i][2] = f;                 // z = f for normalized coordinates
-        
-        rightPoints[i][0] = 80.0 + i * 50.0;  // x (slightly shifted for parallax)
-        rightPoints[i][1] = 105.0 + i * 20.0; // y
-        rightPoints[i][2] = f;                // z = f
-    }
+    leftPoints[0][0] = 320;
+    leftPoints[0][1] = 400; 
+    leftPoints[0][2] = f;    // Set z to focal length
+    
+    rightPoints[0][0] = 270;
+    rightPoints[0][1] = 400;
+    rightPoints[0][2] = f;   // Set z to focal length
     
     // Apply rectification
     rectifyStereoSystem(R, T, f, leftPoints, rightPoints, numPoints, leftRectified, rightRectified);
