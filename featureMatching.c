@@ -5,6 +5,13 @@
 #include <math.h>
 #include <float.h>
 
+// Parameters for feature detection
+#define FAST_THRESHOLD 20       // Intensity difference threshold for corner detection
+#define FAST_RADIUS 3           // Radius for checking surrounding pixels
+#define NMS_RADIUS 5            // Non-maximum suppression radius
+#define DESCRIPTOR_SIZE 32      // Size of binary descriptor in bytes (32 bytes = 256 bits)
+#define DESCRIPTOR_PATCH_SIZE 9 // Size of patch to compute descriptor (9x9)
+
 // Initialize camera parameters with default values
 void initCameraParameters(CameraParameters* params){
     if(params == NULL) return;
@@ -265,24 +272,195 @@ int detectObstacles(const DisparityMap* disparity_map, const CameraParameters* c
     return 1;
 }
 
-// Simple feature extraction function
-int extractFeatures(const uint8_t* image, int width, int height, Feature* features, int max_features){
-    int feature_count = 0;
-    srand(42);
-    for (int i = 0; i < max_features && feature_count < max_features; i++) {
-        float x = 10.0f + (float)(rand() % (width - 20));
-        float y = 10.0f + (float)(rand() % (height - 20));
+// Check if a pixel is a corner by testing surrounding pixels in a circle
+static int isCorner(const uint8_t* image, int width, int height, int x, int y, int threshold) {
+    // If we're too close to the edge, it's not a corner
+    if(x < FAST_RADIUS || x >= width - FAST_RADIUS || y < FAST_RADIUS || y >= height - FAST_RADIUS) return 0;
+
+    // Center pixel value
+    uint8_t center = image[y * width + x];
+
+    // Test points on a circle around the pixel
+    // We'll check 8 points (N, NE, E, SE, S, SW, W, NW) instead of 16 for efficiency
+    const int circle_x[8] = {0, 1, 2, 1, 0, -1, -2, -1};
+    const int circle_y[8] = {-2, -1, 0, 1, 2, 1, 0, -1};
+
+    // Count consecutive pixels that are significantly brighter or darker
+    int consecutive_bright = 0;
+    int consecutive_dark = 0;
+    int max_consecutive_bright = 0;
+    int max_consecutive_dark = 0;
+    
+    for(int i = 0; i < 16; i++){ // Go around twice to handle wrapping
+        int idx = i % 8;
+        int px = x + circle_x[idx];
+        int py = y + circle_y[idx];
+        uint8_t value = image[py * width + px];
         
-        // Set feature position
-        features[feature_count].position.x = x;
-        features[feature_count].position.y = y;
-        
-        // Generate descriptor
-        features[feature_count].descriptor_size = 32; 
-        for (int j = 0; j < features[feature_count].descriptor_size; j++) {
-            features[feature_count].descriptor[j] = (float)(rand() % 256) / 255.0f;
+        // Check if significantly brighter
+        if(value > center + threshold){
+            consecutive_bright++;
+            consecutive_dark = 0;
+        } else if(value < center - threshold){ // Check if significantly darker
+            consecutive_dark++;
+            consecutive_bright = 0;
+        } else{
+            consecutive_bright = 0;
+            consecutive_dark = 0;
         }
-        feature_count++;
+        // Update maximum consecutive counts
+        if(consecutive_bright > max_consecutive_bright) max_consecutive_bright = consecutive_bright;
+        if(consecutive_dark > max_consecutive_dark) max_consecutive_dark = consecutive_dark;
     }
+    // If we have at least 3 consecutive pixels that are brighter or darker,
+    // consider this a corner
+    return (max_consecutive_bright >= 3 || max_consecutive_dark >= 3);
+}
+
+
+// Compute corner score for non-maximum suppression
+// should return the sum of absolute differences from center pixel
+static int cornerScore(const uint8_t* image, int width, int height, int x, int y){
+    // Center pixel value
+    uint8_t center = image[y * width + x];
+    int score = 0;
+    
+    // Same circle points as in isCorner function
+    const int circle_x[8] = {0, 1, 2, 1, 0, -1, -2, -1};
+    const int circle_y[8] = {-2, -1, 0, 1, 2, 1, 0, -1};
+    
+    // Sum up absolute differences
+    for(int i = 0; i < 8; i++){
+        int px = x + circle_x[i];
+        int py = y + circle_y[i];
+        uint8_t value = image[py * width + px];
+        score += abs((int)value - (int)center);
+    }
+    return score;
+}
+
+
+// Compute a simple binary descriptor for a feature point
+static void computeDescriptor(const uint8_t* image, int width, int height, int x, int y, float* descriptor){
+    // Initialize descriptor
+    memset(descriptor, 0, DESCRIPTOR_SIZE * sizeof(float));
+
+    // Check if we have enough space to compute descriptor
+    if(x < DESCRIPTOR_PATCH_SIZE/2 || x >= width - DESCRIPTOR_PATCH_SIZE/2 || y < DESCRIPTOR_PATCH_SIZE/2 || y >= height - DESCRIPTOR_PATCH_SIZE/2) return;
+
+    // Seed for reproducible pair selection
+    srand(42);
+    
+    // Generate pairs for binary tests
+    // Each byte will store 8 binary tests
+    for(int byte = 0; byte < DESCRIPTOR_SIZE; byte++){
+        uint8_t byte_value = 0;
+        for(int bit = 0; bit < 8; bit++){
+            // Generate two random points in the patch
+            int x1 = (rand() % DESCRIPTOR_PATCH_SIZE) - DESCRIPTOR_PATCH_SIZE/2;
+            int y1 = (rand() % DESCRIPTOR_PATCH_SIZE) - DESCRIPTOR_PATCH_SIZE/2;
+            int x2 = (rand() % DESCRIPTOR_PATCH_SIZE) - DESCRIPTOR_PATCH_SIZE/2;
+            int y2 = (rand() % DESCRIPTOR_PATCH_SIZE) - DESCRIPTOR_PATCH_SIZE/2;
+            
+            // Sample pixel values
+            uint8_t value1 = image[(y + y1) * width + (x + x1)];
+            uint8_t value2 = image[(y + y2) * width + (x + x2)];
+            
+            // Set bit if first point is brighter than second
+            if(value1 < value2) byte_value |= (1 << bit);
+        }
+        // Store byte as a float in descriptor (for compatibility with existing code)
+        descriptor[byte] = (float)byte_value;
+    }
+}
+
+int extractFeatures(const uint8_t* image, int width, int height, Feature* features, int max_features){
+    // Temporary storage for corners
+    int* corner_x = (int*)malloc(width * height * sizeof(int));
+    int* corner_y = (int*)malloc(width * height * sizeof(int));
+    int* corner_scores = (int*)malloc(width * height * sizeof(int));
+    
+    if(corner_x == NULL || corner_y == NULL || corner_scores == NULL){
+        free(corner_x);
+        free(corner_y);
+        free(corner_scores);
+        return 0;
+    }
+    // Detect corners
+    int corner_count = 0;
+    for(int y = FAST_RADIUS; y < height - FAST_RADIUS; y++){
+        for(int x = FAST_RADIUS; x < width - FAST_RADIUS; x++){
+            if(isCorner(image, width, height, x, y, FAST_THRESHOLD)){
+                // Store corner
+                corner_x[corner_count] = x;
+                corner_y[corner_count] = y;
+                corner_scores[corner_count] = cornerScore(image, width, height, x, y);
+                corner_count++;
+                // Check if we found too many corners
+                if(corner_count >= width * height) break;
+            }
+        }
+        // Break if we found too many corners
+        if(corner_count >= width * height) break;
+    }
+    printf("Detected %d corners\n", corner_count);
+
+    // Apply non-maximum suppression
+    int feature_count = 0;
+    for(int i = 0; i < corner_count && feature_count < max_features; i++){
+        int x = corner_x[i];
+        int y = corner_y[i];
+        int score = corner_scores[i];
+
+        // Check if this corner has maximum score in its neighborhood
+        int is_maximum = 1;
+        for(int j = 0; j < corner_count; j++){
+            if(i != j){
+                int dx = corner_x[j] - x;
+                int dy = corner_y[j] - y;
+                int distance_squared = dx*dx + dy*dy;
+                // If another corner is in the neighborhood and has higher score
+                if(distance_squared < NMS_RADIUS*NMS_RADIUS && corner_scores[j] > score){
+                    is_maximum = 0;
+                    break;
+                }
+            }
+        }
+        // If this corner has maximum score, add it as a feature
+        if(is_maximum){
+            features[feature_count].position.x = (float)x;
+            features[feature_count].position.y = (float)y;
+            features[feature_count].descriptor_size = DESCRIPTOR_SIZE;
+            // Compute descriptor
+            computeDescriptor(image, width, height, x, y, features[feature_count].descriptor);
+            feature_count++;
+        }
+    }
+    // Free temporary storage
+    free(corner_x);
+    free(corner_y);
+    free(corner_scores);
+
+    printf("After non-maximum suppression: %d features\n", feature_count);
     return feature_count;
+}
+
+// Calculate similarity between two descriptors
+float calculateDescriptorSimilarity(const float* desc1, const float* desc2, int size){
+    int hamming_distance = 0;
+    // Calculate Hamming distance
+    for(int i = 0; i < size; i++){
+        uint8_t byte1 = (uint8_t)desc1[i];
+        uint8_t byte2 = (uint8_t)desc2[i];
+        uint8_t xor_result = byte1 ^ byte2;
+        // Count bits set in xor_result (Brian Kernighan's algorithm)
+        while(xor_result){
+            xor_result &= (xor_result - 1);
+            hamming_distance++;
+        }
+    }
+    // Convert distance to similarity (lower distance = higher similarity)
+    // Maximum Hamming distance for 256-bit descriptor is 256
+    float similarity = 1.0f - (float)hamming_distance / (size * 8);
+    return similarity;
 }
