@@ -1,50 +1,42 @@
 # Compiler
-CC = g++ 
+CC = gcc 
+NVCC = /usr/local/cuda/bin/nvcc
 
 # Compiler flags
-CFLAGS = -Wall 
+CCFLAGS =  -I/usr/include/opencv4 
+CUFLAGS = -I/usr/local/cuda/bin -I/usr/include/opencv4 -w 
 
-# Source files for camera calibration
-CALIB_SRCS = calib.cc readParams.cc readData.cc utils.cc matrixUtils.cc
+#Load Libraries
+LDLIBS = -I/usr/include/opencv4 -ljpeg -lm -lopencv_core -lopencv_imgproc -lopencv_calib3d -lopencv_highgui -lopencv_imgcodecs -lopencv_calib3d -lopencv_videoio -llapacke -llapack -lblas -lcuda
 
-# Source files for rectification test
-RECT_SRCS = rectification_main.c rectification.c utils.cc matrixUtils.cc
+# Source files
+CCSRCS = rtStereo.cc imageUtils.cc  
+CUSRCS = stereoKernel.cu stereoDepth.cu
 
-# Object files
-CALIB_OBJS = $(CALIB_SRCS:.cc=.o)
-RECT_OBJS = rectification_main.o rectification.o utils.o matrixUtils.o
+# Object files (replace .cc with .o)
+CCOBJS = $(CCSRCS:.cc=.o)
+CUOBJS = $(CUSRCS:.cu=.o)
 
-# Output executables
-CALIB_TARGET = calib
-RECT_TARGET = rectification_test
+# Output executable
+TARGET = rtStereo 
 
-# Default rule
-all: $(CALIB_TARGET) $(RECT_TARGET)
+# Rule to build the final executable
+$(TARGET): $(CCOBJS) $(CUOBJS)
+	$(NVCC) $(CUFLAGS) -o $(TARGET) $(CCOBJS) $(CUOBJS) $(LDLIBS)
 
-# Rule to build the final calibration executable
-$(CALIB_TARGET): $(CALIB_OBJS)
-	$(CC) $(CFLAGS) -o $(CALIB_TARGET) $(CALIB_OBJS)
+# Rule to build cc object files
+%.o: %.cc 
+	$(CC) $(CCFLAGS) -c $< -o $@
 
-# Rule to build the rectification test executable
-$(RECT_TARGET): $(RECT_OBJS)
-	$(CC) $(CFLAGS) -o $(RECT_TARGET) $(RECT_OBJS) -lm
-
-# Rule to build object files from .cc files
-%.o: %.cc
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# Rule to build object files from .c files
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+# Rule to build cu object files
+%.o: %.cu 
+	$(NVCC) $(CUFLAGS) -c $< -o $@
 
 # Clean rule
 clean:
-	rm -f *.o $(CALIB_TARGET) $(RECT_TARGET)
+	rm -f $(CCOBJS) $(CUOBJS) $(TARGET)
 
-# Run the calibration program
-run-calib: $(CALIB_TARGET)
-	./$(CALIB_TARGET)
+# Run the program
+run: $(TARGET)
+	./$(TARGET)
 
-# Run the rectification test program
-run-rect: $(RECT_TARGET)
-	./$(RECT_TARGET)
