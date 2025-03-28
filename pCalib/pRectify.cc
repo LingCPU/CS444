@@ -8,8 +8,8 @@ using namespace std;
 int main() {
     
 // Load left and right stereo images
-    Mat leftImageColor  = imread("nvcamtest_6735_s00_00000.jpg");
-    Mat rightImageColor = imread("nvcamtest_6657_s01_00000.jpg");
+    Mat leftImageColor  = imread("nvcamtest_6285_s00_00000.jpg");
+    Mat rightImageColor = imread("nvcamtest_6407_s01_00000.jpg");
 
      cv::Mat leftImage,rightImage;
      cv::cvtColor(leftImageColor,leftImage, cv::COLOR_BGR2GRAY);
@@ -25,25 +25,25 @@ int main() {
 
  
 // Camera parameters (intrinsic matrices)
-       Mat cameraMatrix1 = (Mat_<double>(3,3) << 578.86, 0, 329.12,
-                                                 0, 772.98, 245,
+       Mat cameraMatrix1 = (Mat_<double>(3,3) << 528.6461845898718, 0, 325.4710649231039,
+                                                 0, 706.9186955276181, 202.031004939529,
                                                   0,0,1);
-        Mat cameraMatrix2 = (Mat_<double>(3,3) << 576.05, 0, 303.22,
-                                                  0, 768.94, 252.27,
+        Mat cameraMatrix2 = (Mat_<double>(3,3) << 520.0671048419499, 0, 298.6961342557124,
+                                                  0, 693.4149494934318, 228.9156243346911,
                                                   0 ,0, 1);
   
         // Distortion coefficients
-        Mat distCoeffs1 = (Mat_<double>(1, 5) << -0.166,1.16,0.00,0.00,-2.54);
-        Mat distCoeffs2 = (Mat_<double>(1, 5) << -0.179,1.49,0.00,0.00,-3.89);
+        Mat distCoeffs1 = (Mat_<double>(1, 5) << 0.08407071170703606, -0.7781138364845686, -0.006620520794116058, 0.01395562317320084, 2.535675719055754);
+        Mat distCoeffs2 = (Mat_<double>(1, 5) << -0.01948778644990348, 0.6977298913980967, -0.01277984979114205, 0.005629990987745017, -1.441622889141244);
 
 //Rotation matrix R:
- Mat R = (Mat_<double>(3,3) <<0.9998996653444937, -0.007885144718599264, -0.01176791131579057,
-                              0.007832711413248565, 0.9999592206338627, -0.004495075220148332,
-                              0.0118028757464582, 0.004402449555051375, 0.9999206521329724);
+ Mat R = (Mat_<double>(3,3) << 0.9999984174903006, 0.001479260162221432, 0.0009883350984411189,
+                               -0.001484940501796228, 0.9999822417289682, 0.005771583700641334,
+                              -0.000979779873477283, -0.00577304218587117, 0.9999828558606991);
 //Translation vector T:
-Mat T = (Mat_<double>(3,1) << -58.96213584809675,
-                              -0.3678605528979815,
-                              -0.6298580023378643);
+Mat T = (Mat_<double>(3,1) << -59.90256900017663,
+                              -3.763100080325988,
+                              -9.167283490423932);
 // Output rectification transforms, projection matrices, and disparity-to-depth mapping matrix
     Mat R1, R2, P1, P2, Q;
     
