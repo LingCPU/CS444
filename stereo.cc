@@ -6,13 +6,11 @@
 #include "matrixUtils.h"
 #include "utils.h"
 
-// Simple structure for a feature point
 typedef struct{
     int x, y;               // Position in image
     unsigned char desc[25]; // Simple descriptor (5x5 patch)
 } Feature;
 
-// Structure to store a feature match
 typedef struct{
     int left_idx;           // Index in left image features
     int right_idx;          // Index in right image features
@@ -46,7 +44,6 @@ int isCorner(const unsigned char* image, int width, int height, int x, int y, in
 // Create a simple descriptor by sampling a 5x5 patch around the feature
 void createDescriptor(const unsigned char* image, int width, int height, int x, int y, unsigned char* descriptor){
     int idx = 0;
-
     // Sample a 5x5 grid around the feature point
     for(int i = -2; i <= 2; i++){
         for(int j = -2; j <= 2; j++){
@@ -105,7 +102,7 @@ int matchFeatures(const Feature* left_features, int left_count, const Feature* r
         int best_match = -1;
         
         // Look for matches in right image
-        for (int j = 0; j < right_count; j++) {
+        for(int j = 0; j < right_count; j++){
             // Check if features are at similar y-coordinates
             if(abs(left_features[i].y - right_features[j].y) > 2) continue;
                 
@@ -135,9 +132,9 @@ int matchFeatures(const Feature* left_features, int left_count, const Feature* r
 }
 
 int main(){
-    const int windowWidth = 11; //must be odd
+    const int windowWidth = 11; // must be odd
     const int halfWindow = (windowWidth-1)/2;
-    const int searchWidth = 71; //pixels must be odd
+    const int searchWidth = 71; // pixels must be odd
     const char* leftBW  = "leftBW.ppm";
     const char* rightBW = "warpedImg.ppm";
     const char* depthImageName = "depth.ppm";
