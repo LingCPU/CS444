@@ -8,7 +8,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <cuda_runtime.h>
+#include "cuda_include.h"
 #include "stereoKernel.h"
 
 using namespace cv;
