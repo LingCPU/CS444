@@ -1,18 +1,12 @@
 # Compiler
-CC = gcc 
-
-# CUDA paths for Jetson Nano
-CUDA_PATH = /usr/local/cuda-10.2
-CUDA_INCLUDE = $(CUDA_PATH)/targets/aarch64-linux/include
-CUDA_LIB = $(CUDA_PATH)/targets/aarch64-linux/lib
-NVCC = $(CUDA_PATH)/bin/nvcc
+CC =gcc 
 
 # Compiler flags
-CCFLAGS = -I/usr/include/opencv4 
-CUFLAGS = -I$(CUDA_INCLUDE) -I/usr/include/opencv4 -w 
+CCFLAGS =  -I/usr/include/opencv4 
+CUFLAGS = -I/usr/include/opencv4 -w 
 
-# Load Libraries
-LDLIBS = -I/usr/include/opencv4 -ljpeg -lm -lopencv_core -lopencv_imgproc -lopencv_calib3d -lopencv_highgui -lopencv_imgcodecs -lopencv_calib3d -llapacke -llapack -lblas -lcuda -L$(CUDA_LIB) -lcudart
+#Load Libraries
+LDLIBS = -I/usr/include/opencv4 -ljpeg -lm -lopencv_core -lopencv_imgproc -lopencv_calib3d -lopencv_highgui -lopencv_imgcodecs -lopencv_calib3d -llapacke -llapack -lblas -lcuda
 
 # Source files
 CCSRCS = stereoCuda.cc   
@@ -27,15 +21,15 @@ TARGET = stereoCuda
 
 # Rule to build the final executable
 $(TARGET): $(CCOBJS) $(CUOBJS)
-	$(NVCC) $(CUFLAGS) -o $(TARGET) $(CCOBJS) $(CUOBJS) $(LDLIBS)
+	nvcc $(CUFLAGS) -o $(TARGET) $(CCOBJS) $(CUOBJS) $(LDLIBS)
 
 # Rule to build cc object files
 %.o: %.cc 
-	$(CC) $(CCFLAGS) -c $< -o $@
+	gcc $(CCFLAGS) -c $< -o $@
 
 # Rule to build cu object files
 %.o: %.cu 
-	$(NVCC) $(CUFLAGS) -c $< -o $@
+	nvcc $(CUFLAGS) -c $< -o $@
 
 # Clean rule
 clean:
@@ -44,3 +38,4 @@ clean:
 # Run the program
 run: $(TARGET)
 	./$(TARGET)
+
