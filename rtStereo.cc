@@ -13,9 +13,71 @@
 using namespace cv;
 using namespace std;
 
+void detectObstacles(const Mat& depthImage, bool& leftClear, bool& centerClear, bool& rightClear, 
+                     double obstacleThreshold, Mat& obstacleImage){
+                        
+    int rows = depthImage.rows;
+    int cols = depthImage.cols;
+    obstacleImage = Mat::zeros(rows, cols, CV_8UC1);
+    
+    // Define regions, counters, horizon
+    int leftStart = 0;
+    int leftEnd = cols / 3;
+    int centerStart = cols / 3;
+    int centerEnd = 2 * cols / 3;
+    int rightStart = 2 * cols / 3;
+    int rightEnd = cols;
+    int horizonLine = rows / 2;
+    int leftObstacles = 0;
+    int centerObstacles = 0;
+    int rightObstacles = 0;
+    
+    // Count total pixels in each region
+    int leftTotal = (leftEnd - leftStart) * (rows - horizonLine);
+    int centerTotal = (centerEnd - centerStart) * (rows - horizonLine);
+    int rightTotal = (rightEnd - rightStart) * (rows - horizonLine);
+    
+    // Detect obstacles in depth image
+    for(int y = horizonLine; y < rows; y++){
+        for(int x = 0; x < cols; x++){
+            // Get the depth value
+            uchar depth = depthImage.at<uchar>(y, x);
+            
+            // If the pixel has a non-zero depth value and is closer than threshold
+            // The lower the depth value, the closer the object (we invert the check)
+            if(depth > 0 && depth < obstacleThreshold){
+                // Mark as obstacle in the obstacle image
+                obstacleImage.at<uchar>(y, x) = 255;
+                
+                // Count obstacle in the appropriate region
+                if(x >= leftStart && x < leftEnd) leftObstacles++;
+                else if(x >= centerStart && x < centerEnd) centerObstacles++;
+                else if(x >= rightStart && x < rightEnd) rightObstacles++;
+            }
+        }
+    }
+    
+    // Calculate obstacle density for each region
+    double leftDensity = (double)leftObstacles / leftTotal;
+    double centerDensity = (double)centerObstacles / centerTotal;
+    double rightDensity = (double)rightObstacles / rightTotal;
+
+    double densityThreshold = 0.1; // 10% obstacle density
+    
+    // Figure which region/side is best
+    leftClear = (leftDensity < densityThreshold);
+    centerClear = (centerDensity < densityThreshold);
+    rightClear = (rightDensity < densityThreshold);
+    
+    // Draw region markers on the obstacle image
+    line(obstacleImage, Point(leftEnd, 0), Point(leftEnd, rows-1), Scalar(128), 2);
+    line(obstacleImage, Point(centerEnd, 0), Point(centerEnd, rows-1), Scalar(128), 2);
+    line(obstacleImage, Point(0, horizonLine), Point(cols-1, horizonLine), Scalar(128), 2);   
+}
+
 int main(int argc, char** argv){
 
-    int fps = 10; // in frames per sec
+    int fps = 60; // in frames per sec
     int frameDelay = 1000/(2*fps); // in millisec 
     double maxDistance = 5000.0; // mm
     int rows  = 480;
