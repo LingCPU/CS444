@@ -34,18 +34,18 @@ int row = blockIdx.y*blockDim.y + threadIdx.y;
     
     // Only process pixels with sufficient texture
     int textureThreshold = 10;
-    int minVal = 0;
-    int maxVal = 255;
+    bool hasTexture = false;
     
-    for(int wy = -halfWindow; wy <= halfWindow; wy++){
-        for(int wx = -halfWindow; wx <= halfWindow; wx++){
-            int pixel = left[(row + wy) * cols + (col + wx)];
-            if(pixel > maxVal) maxVal = pixel;
-            if(pixel < minVal) minVal = pixel;
+    // Texture check
+    for(int wy = -1; wy <= 1 && !hasTexture; wy++){
+        for(int wx = -1; wx <= 1 && !hasTexture; wx++){
+            int centerVal = left[(row) * cols + (col)];
+            int neighborVal = left[(row + wy) * cols + (col + wx)];
+            if(abs(centerVal - neighborVal) > textureThreshold) hasTexture = true;
         }
     }
     
-    if((maxVal - minVal) < textureThreshold){
+    if(!hasTexture){
         depth[row * cols + col] = 0;
         return;
     }
