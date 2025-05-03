@@ -8,6 +8,11 @@
 #include <vector>
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <termios.h>
+#include <string.h>
+#include <errno.h>
 #include "stereoDepth.h"
 
 using namespace cv;
@@ -145,7 +150,7 @@ void generateMotorCommand(bool leftClear, bool centerClear, bool rightClear,
 
 int main(int argc, char** argv){
 
-    int fps = 60; // in frames per sec
+    int fps = 10; // in frames per sec
     int frameDelay = 1000/(2*fps); // in millisec 
     double maxDistance = 5000.0; // mm
     int rows  = 480;
