@@ -23,8 +23,8 @@ int row = blockIdx.y*blockDim.y + threadIdx.y;
     // Parameters for stereo matching
     const int windowSize = 9;        // Window size for matching (must be odd)
     const int halfWindow = windowSize / 2;
-    const int maxDisparity = 64;     // Maximum pixel displacement
-    const int minDisparity = 5;      // Minimum pixel displacement to be consider valid
+    const int maxDisparity = 80;     // Maximum pixel displacement
+    const int minDisparity = 4;      // Minimum pixel displacement to be consider valid
     
     const float baselineFocal = 60.0f * 560.0f; 
     if(col < halfWindow || col >= cols - halfWindow || row < halfWindow || row >= rows - halfWindow){
@@ -33,13 +33,13 @@ int row = blockIdx.y*blockDim.y + threadIdx.y;
     }
     
     // Only process pixels with sufficient texture
-    int textureThreshold = 10;
+    int textureThreshold = 8;
     int minVal = 0;
     int maxVal = 255;
     
     // Texture check
-    for(int wy = -halfWindow; wy <= halfWindow; wy++){
-        for(int wx = -halfWindow; wx <= halfWindow; wx++){
+    for(int wy = -1; wy <= 1; wy++){
+        for(int wx = -1; wx <= 1; wx++){
             int pixel = left[(row + wy) * cols + (col + wx)];
             if(pixel > maxVal) maxVal = pixel;
             if(pixel < minVal) minVal = pixel;
@@ -61,8 +61,8 @@ int row = blockIdx.y*blockDim.y + threadIdx.y;
         if(col - d < halfWindow) continue;
         int sad = 0;
         // Calculate sum of absolute differences for the window
-        for(int wy = -halfWindow; wy <= halfWindow; wy++){
-            for(int wx = -halfWindow; wx <= halfWindow; wx++){
+        for(int wy = -halfWindow; wy <= halfWindow; wy+=2){
+            for(int wx = -halfWindow; wx <= halfWindow; wx+=2){
                 int leftPixel = left[(row + wy) * cols + (col + wx)];
                 int rightPixel = right[(row + wy) * cols + (col + wx - d)];
                 sad += abs(leftPixel - rightPixel);
@@ -76,6 +76,78 @@ int row = blockIdx.y*blockDim.y + threadIdx.y;
         }
     }
     
+    int refinedMin = (bestDisparity > minDisparity) ? bestDisparity - 2 : minDisparity;
+    int refinedMax = (bestDisparity < maxDisparity - 2) ? bestDisparity + 2 : maxDisparity;
+    minSAD = INT_MAX;
+
+    for(int d = refinedMin; d < refinedMax; d++) {
+        if(col - d < halfWindow) continue;
+
+        int sad = 0;
+        for(int wy = -halfWindow; wy <= halfWindow; wy++) {
+            for(int wx = -halfWindow; wx <= halfWindow; wx++) {
+                int leftPixel = left[(row + wy) * cols + (col + wx)];
+                int rightPixel = right[(row + wy) * cols + (col - d + wx)];
+                sad += abs(leftPixel - rightPixel);
+            }
+        }
+
+        if(sad < minSAD) {
+            minSAD = sad;
+            bestDisparity = d;
+        }
+    }
+
+    float uniquenessRatio = 0.8f;
+    for(int d = minDisparity; d < maxDisparity; d++) {
+        if(d == bestDisparity) continue;
+
+        if(col - d < halfWindow) continue;
+
+        int sad = 0;
+        for(int wy = -halfWindow; wy <= halfWindow; wy++) {
+            for(int wx = -halfWindow; wx <= halfWindow; wx++) {
+                int leftPixel = left[(row + wy) * cols + (col + wx)];
+                int rightPixel = right[(row + wy) * cols + (col - d + wx)];
+                sad += abs(leftPixel - rightPixel);
+                // Early termination
+                if(sad > minSAD / uniquenessRatio) break;
+            }
+            if(sad > minSAD / uniquenessRatio) break;
+        }
+
+        if(sad < minSAD / uniquenessRatio) {
+            // Match is ambiguous, reject it
+            depth[row * cols + col] = 0;
+            return;
+        }
+    }
+if(bestDisparity > minDisparity && bestDisparity < maxDisparity - 1) {
+        int sadPrev = 0, sadNext = 0;
+
+        // Calculate SAD for previous disparity
+        for(int wy = -halfWindow; wy <= halfWindow; wy++) {
+            for(int wx = -halfWindow; wx <= halfWindow; wx++) {
+                int leftPixel = left[(row + wy) * cols + (col + wx)];
+                int rightPixel = right[(row + wy) * cols + (col - (bestDisparity-1) + wx)];
+                sadPrev += abs(leftPixel - rightPixel);
+            }
+        }
+
+        // Calculate SAD for next disparity
+        for(int wy = -halfWindow; wy <= halfWindow; wy++) {
+            for(int wx = -halfWindow; wx <= halfWindow; wx++) {
+                int leftPixel = left[(row + wy) * cols + (col + wx)];
+                int rightPixel = right[(row + wy) * cols + (col - (bestDisparity+1) + wx)];
+                sadNext += abs(leftPixel - rightPixel);
+            }
+        }
+
+        // Sub-pixel correction using parabolic interpolation
+        float delta = 0.5f * (sadPrev - sadNext) / (float)(sadPrev - 2*minSAD + sadNext);
+        bestDisparity = bestDisparity + delta;
+    }
+
     // Filter poor matches
     float threshold = windowSize * windowSize * 10;
     if(minSAD > threshold || bestDisparity < minDisparity){
