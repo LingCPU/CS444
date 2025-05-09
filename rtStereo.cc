@@ -78,12 +78,24 @@ int serialPortClose(int serial_port){
 
 int main(int argc, char** argv){
 
-    int fps = 10; // in frames per sec
+    int fps = 60; // in frames per sec
     int frameDelay = 1000/(2*fps); // in millisec 
+    int maxDisparity = 128;
     double maxDistance = 5000.0; // mm
+    double baseline = 60.0;
+    double focalLength = 578.0;
+    double minDistance = baseline * focalLength / (double)maxDisparity;
     int rows  = 480;
     int cols  = 640;
+
+    Mat disparityImage = Mat::zeros(rows, cols, CV_8UC1);
+    Mat obstacleImage = Mat::zeros(rows, cols, CV_8UC1);
+    Mat filteredObstacles = Mat::zeros(rows, cols, CV_8UC1);
+    Mat leftFrame, rightFrame, both;
+    Mat rectifiedLeft, recctifiedRight;
+    Mat medianDisparity, guassianDisparity;
     Mat depthImage = Mat::zeros(rows,cols, CV_8UC1);
+
     double obstacleThreshold = 100;
     int baseSpeed = 64;
 
@@ -107,6 +119,16 @@ int main(int argc, char** argv){
     if( map2x.empty()) cout << "Empty 2x lookup table"<<endl;
     if( map2y.empty()) cout << "Empty 2y lookup table"<<endl;
 
+    float offset = 0.0;
+    float currentRow;
+    for(int row = 0; row < rows; row++){
+        for(int col = 0; col < cols; col++){
+            currentRow = map2y.at<float>(row, col);
+            if(currentRow + offset < 0 || currentRow + offset > rows) map2y.at<float>(row, col) = currentRow;
+            else map2y.at<float>(row, col) = currentRow + offset;
+        }
+    }
+
     string left_cam_pipeline  = "nvarguscamerasrc sensor-id=0 ! video/x-raw(memory:NVMM), width=640, height=480, framerate="+to_string(fps)+
                                 "/1 ! nvvidconv flip-method=rotate-180 ! video/x-raw, format=GRAY8 !  appsink drop=1";
 
@@ -122,9 +144,6 @@ int main(int argc, char** argv){
         cerr << "Error: Could not open stereo cameras." << endl;
         return -1;
     }
-
-
-    Mat leftFrame, rightFrame;
 
     cout << " width \n" << capL.get(CAP_PROP_FRAME_WIDTH)<<endl;
     cout << " height  \n" << capL.get(CAP_PROP_FRAME_HEIGHT)<<endl;
@@ -143,16 +162,16 @@ int main(int argc, char** argv){
         }
 
         // Apply rectification
-        Mat rectifiedLeft, rectifiedRight, both;
         remap(leftFrame, rectifiedLeft, map1x, map1y, INTER_LINEAR);
         remap(rightFrame, rectifiedRight, map2x, map2y, INTER_LINEAR);
 
         // Compute depth image
-        stereoDepth(&rectifiedLeft, &rectifiedRight, &depthImage, maxDistance, rows, cols);
+        stereoDepth(&rectifiedLeft, &rectifiedRight, &disparityImage, maxDisparity, rows, cols);
 
         // Smooth the depth image
-        Mat medianFiltered;
-        medianBlur(depthImage, medianFiltered, 3);
+        medianBlur(disparityImage, medianDisparity, 5);
+        GuassianBlur(medianDisparity, guassianDisparity, Size(5, 5), 0);
+        imshow("depth", guassianDisparity);
 
         // Detect obstacles and determine safe direction
         bool leftClear, centerClear, rightClear;
