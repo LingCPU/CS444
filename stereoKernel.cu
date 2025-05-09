@@ -4,7 +4,7 @@
 #include <cuda_runtime.h>
 #include <limits.h>
 
-__global__ void stereoKernel(unsigned char* left, unsigned char* right,
+__global__ void stereoKernel(unsigned char* left, unsigned char* right, unsigned char* disparity,
                              double maxDisparity, int rows, int cols){
 
     // compute the row and col of the pixel to be processed
@@ -66,7 +66,7 @@ __global__ void stereoKernel(unsigned char* left, unsigned char* right,
         }
         if(sumDiff < minSumDiff){
             minSumDiff = sumDiff;
-            disp = (unsigned char)l;
+            disp = (unsigned char)k;
         }
     }
 
