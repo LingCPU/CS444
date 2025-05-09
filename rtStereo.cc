@@ -78,62 +78,111 @@ int serialPortClose(int serial_port){
 
 
 void detectObstacles(const Mat& depthImage, bool& leftClear, bool& centerClear, bool& rightClear, 
-                     double obstacleThreshold, Mat& obstacleImage){
-                        
+                     double obstacleThreshold, Mat& obstacleImage) {
     int rows = depthImage.rows;
     int cols = depthImage.cols;
-    obstacleImage = Mat::zeros(rows, cols, CV_8UC1);
     
-    // Define regions, counters, horizon
+    // Create a color visualization of the obstacles
+    obstacleImage = Mat(rows, cols, CV_8UC3, Scalar(0, 0, 0));
+    
+    // Define regions, counters, and horizon
     int leftStart = 0;
     int leftEnd = cols / 3;
     int centerStart = cols / 3;
     int centerEnd = 2 * cols / 3;
     int rightStart = 2 * cols / 3;
     int rightEnd = cols;
-    int horizonLine = rows / 2;
-    int leftObstacles = 0;
-    int centerObstacles = 0;
-    int rightObstacles = 0;
     
-    // Count total pixels in each region
+    // Adjust horizon line to focus on more relevant part of the image
+    int horizonLine = rows * 2 / 3;  // Lower in the image (closer to robot)
+    
+    // Count obstacles in different distance zones
+    int nearZone = obstacleThreshold / 3;       // Very close obstacles
+    int midZone = obstacleThreshold * 2 / 3;    // Medium distance obstacles
+    
+    // Counters for obstacles
+    int leftNearObstacles = 0, leftMidObstacles = 0, leftFarObstacles = 0;
+    int centerNearObstacles = 0, centerMidObstacles = 0, centerFarObstacles = 0;
+    int rightNearObstacles = 0, rightMidObstacles = 0, rightFarObstacles = 0;
+    
+    // Total pixels in each region (for calculating density)
     int leftTotal = (leftEnd - leftStart) * (rows - horizonLine);
     int centerTotal = (centerEnd - centerStart) * (rows - horizonLine);
     int rightTotal = (rightEnd - rightStart) * (rows - horizonLine);
     
-    // Detect obstacles in depth image
-    for(int y = horizonLine; y < rows; y++){
-        for(int x = 0; x < cols; x++){
-            // Get the depth value
+    // Detect obstacles
+    for(int y = horizonLine; y < rows; y++) {
+        for(int x = 0; x < cols; x++) {
+            // Skip pixels with no depth info
             uchar depth = depthImage.at<uchar>(y, x);
-            if(depth > 0 && depth < obstacleThreshold){
-                // Mark as obstacle in the obstacle image
-                obstacleImage.at<uchar>(y, x) = 255;
+            if(depth == 0) continue;
+            
+            // Check if pixel is within obstacle range
+            if(depth < obstacleThreshold) {
+                // Determine color based on depth (closer = more red)
+                Vec3b color;
+                if(depth < nearZone) {
+                    color = Vec3b(0, 0, 255);  // Red for very close obstacles
+                } else if(depth < midZone) {
+                    color = Vec3b(0, 165, 255);  // Orange for medium obstacles
+                } else {
+                    color = Vec3b(0, 255, 255);  // Yellow for farther obstacles
+                }
                 
-                // Count obstacle in the regions
-                if(x >= leftStart && x < leftEnd) leftObstacles++;
-                else if(x >= centerStart && x < centerEnd) centerObstacles++;
-                else if(x >= rightStart && x < rightEnd) rightObstacles++;
+                // Set pixel in obstacle image
+                obstacleImage.at<Vec3b>(y, x) = color;
+                
+                // Count obstacle in the appropriate region and distance
+                if(x >= leftStart && x < leftEnd) {
+                    if(depth < nearZone) leftNearObstacles++;
+                    else if(depth < midZone) leftMidObstacles++;
+                    else leftFarObstacles++;
+                } 
+                else if(x >= centerStart && x < centerEnd) {
+                    if(depth < nearZone) centerNearObstacles++;
+                    else if(depth < midZone) centerMidObstacles++;
+                    else centerFarObstacles++;
+                } 
+                else if(x >= rightStart && x < rightEnd) {
+                    if(depth < nearZone) rightNearObstacles++;
+                    else if(depth < midZone) rightMidObstacles++;
+                    else rightFarObstacles++;
+                }
             }
         }
     }
     
-    // Calculate obstacle density for each region
-    double leftDensity = (double)leftObstacles / leftTotal;
-    double centerDensity = (double)centerObstacles / centerTotal;
-    double rightDensity = (double)rightObstacles / rightTotal;
-
-    double densityThreshold = 0.1; // 10% obstacle density
+    // Calculate obstacle density with weighted importance for closer obstacles
+    float weightNear = 3.0;  // Near obstacles count more
+    float weightMid = 1.5;   // Medium obstacles have some importance
+    float weightFar = 1.0;   // Far obstacles count normally
     
-    // Figure which region/side is best
+    double leftDensity = (leftNearObstacles * weightNear + leftMidObstacles * weightMid + leftFarObstacles * weightFar) / leftTotal;
+    double centerDensity = (centerNearObstacles * weightNear + centerMidObstacles * weightMid + centerFarObstacles * weightFar) / centerTotal;
+    double rightDensity = (rightNearObstacles * weightNear + rightMidObstacles * weightMid + rightFarObstacles * weightFar) / rightTotal;
+    
+    // Adaptive threshold based on overall obstacle density
+    double totalDensity = (leftDensity + centerDensity + rightDensity) / 3.0;
+    double densityThreshold = 0.05 + (totalDensity * 0.1);  // Base + adaptive component
+    densityThreshold = min(densityThreshold, 0.15);  // Cap at 0.15
+    
+    // Determine which regions are clear
     leftClear = (leftDensity < densityThreshold);
     centerClear = (centerDensity < densityThreshold);
     rightClear = (rightDensity < densityThreshold);
     
     // Draw region markers on the obstacle image
-    line(obstacleImage, Point(leftEnd, 0), Point(leftEnd, rows-1), Scalar(128), 2);
-    line(obstacleImage, Point(centerEnd, 0), Point(centerEnd, rows-1), Scalar(128), 2);
-    line(obstacleImage, Point(0, horizonLine), Point(cols-1, horizonLine), Scalar(128), 2);   
+    line(obstacleImage, Point(leftEnd, 0), Point(leftEnd, rows-1), Scalar(255, 255, 255), 2);
+    line(obstacleImage, Point(centerEnd, 0), Point(centerEnd, rows-1), Scalar(255, 255, 255), 2);
+    line(obstacleImage, Point(0, horizonLine), Point(cols-1, horizonLine), Scalar(255, 255, 255), 2);
+    
+    // Display density values and thresholds for debugging
+    putText(obstacleImage, format("L: %.3f %s", leftDensity, leftClear ? "CLEAR" : "BLOCKED"), 
+            Point(10, 20), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255));
+    putText(obstacleImage, format("C: %.3f %s", centerDensity, centerClear ? "CLEAR" : "BLOCKED"), 
+            Point(cols/3 + 10, 20), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255));
+    putText(obstacleImage, format("R: %.3f %s", rightDensity, rightClear ? "CLEAR" : "BLOCKED"), 
+            Point(2*cols/3 + 10, 20), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255));
 }
 
 void generateMotorCommand(bool leftClear, bool centerClear, bool rightClear, 
