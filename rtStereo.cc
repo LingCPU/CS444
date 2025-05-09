@@ -76,78 +76,6 @@ int serialPortClose(int serial_port){
     return close(serial_port);
 }
 
-
-void detectObstacles(const Mat& depthImage, bool& leftClear, bool& centerClear, bool& rightClear, 
-                     double obstacleThreshold, Mat& obstacleImage){
-                        
-    int rows = depthImage.rows;
-    int cols = depthImage.cols;
-    obstacleImage = Mat::zeros(rows, cols, CV_8UC1);
-    
-    // Define regions, counters, horizon
-    int leftStart = 0;
-    int leftEnd = cols / 3;
-    int centerStart = cols / 3;
-    int centerEnd = 2 * cols / 3;
-    int rightStart = 2 * cols / 3;
-    int rightEnd = cols;
-    int horizonLine = rows / 2;
-    int leftObstacles = 0;
-    int centerObstacles = 0;
-    int rightObstacles = 0;
-    
-    // Count total pixels in each region
-    int leftTotal = (leftEnd - leftStart) * (rows - horizonLine);
-    int centerTotal = (centerEnd - centerStart) * (rows - horizonLine);
-    int rightTotal = (rightEnd - rightStart) * (rows - horizonLine);
-    
-    // Detect obstacles in depth image
-    for(int y = horizonLine; y < rows; y++){
-        for(int x = 0; x < cols; x++){
-            // Get the depth value
-            uchar depth = depthImage.at<uchar>(y, x);
-            if(depth > 0 && depth < obstacleThreshold){
-                // Mark as obstacle in the obstacle image
-                obstacleImage.at<uchar>(y, x) = 255;
-                
-                // Count obstacle in the regions
-                if(x >= leftStart && x < leftEnd) leftObstacles++;
-                else if(x >= centerStart && x < centerEnd) centerObstacles++;
-                else if(x >= rightStart && x < rightEnd) rightObstacles++;
-            }
-        }
-    }
-    
-    // Calculate obstacle density for each region
-    double leftDensity = (double)leftObstacles / leftTotal;
-    double centerDensity = (double)centerObstacles / centerTotal;
-    double rightDensity = (double)rightObstacles / rightTotal;
-
-    double densityThreshold = 0.1; // 10% obstacle density
-    
-    // Figure which region/side is best
-    leftClear = (leftDensity < densityThreshold);
-    centerClear = (centerDensity < densityThreshold);
-    rightClear = (rightDensity < densityThreshold);
-    
-    // Draw region markers on the obstacle image
-    line(obstacleImage, Point(leftEnd, 0), Point(leftEnd, rows-1), Scalar(128), 2);
-    line(obstacleImage, Point(centerEnd, 0), Point(centerEnd, rows-1), Scalar(128), 2);
-    line(obstacleImage, Point(0, horizonLine), Point(cols-1, horizonLine), Scalar(128), 2);   
-}
-
-void generateMotorCommand(bool leftClear, bool centerClear, bool rightClear, 
-                          char* command, int baseSpeed){
-    // Default is to stop if no clear path
-    strcpy(command, "STP000\n");
-    
-    // Decision tree for navigation
-    if(centerClear) sprintf(command, "FWD%03d\n", baseSpeed);
-    else if(leftClear && !rightClear) strcpy(command, "STR045\n");
-    else if(!leftClear && rightClear) strcpy(command, "STR135\n");
-    else if(leftClear && rightClear) strcpy(command, "STR045\n");
-}
-
 int main(int argc, char** argv){
 
     int fps = 10; // in frames per sec
@@ -156,7 +84,6 @@ int main(int argc, char** argv){
     int rows  = 480;
     int cols  = 640;
     Mat depthImage = Mat::zeros(rows,cols, CV_8UC1);
-    Mat obstacleImage = Mat::zeros(rows, cols, CV_8UC1);
     double obstacleThreshold = 100;
     int baseSpeed = 64;
 
@@ -229,11 +156,9 @@ int main(int argc, char** argv){
 
         // Detect obstacles and determine safe direction
         bool leftClear, centerClear, rightClear;
-        detectObstacles(medianFiltered, leftClear, centerClear, rightClear, obstacleThreshold, obstacleImage);
-        
+              
         // Generate motor command based on obstacle detection
         char command[8];
-        generateMotorCommand(leftClear, centerClear, rightClear, command, baseSpeed);
         
         // Send command to motor controller if serial port is open
         if(serialPort >= 0) serialPortWrite(command, serialPort);

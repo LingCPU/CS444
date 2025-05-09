@@ -23,8 +23,8 @@ int row = blockIdx.y*blockDim.y + threadIdx.y;
     // Parameters for stereo matching
     const int windowSize = 9;        // Window size for matching (must be odd)
     const int halfWindow = windowSize / 2;
-    const int maxDisparity = 64;     // Maximum pixel displacement
-    const int minDisparity = 5;      // Minimum pixel displacement to be consider valid
+    const int maxDisparity = 80;     // Maximum pixel displacement
+    const int minDisparity = 4;      // Minimum pixel displacement to be consider valid
     
     const float baselineFocal = 60.0f * 560.0f; 
     if(col < halfWindow || col >= cols - halfWindow || row < halfWindow || row >= rows - halfWindow){
@@ -33,7 +33,7 @@ int row = blockIdx.y*blockDim.y + threadIdx.y;
     }
     
     // Only process pixels with sufficient texture
-    int textureThreshold = 10;
+    int textureThreshold = 4;
     int minVal = 0;
     int maxVal = 255;
     
