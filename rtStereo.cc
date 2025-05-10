@@ -77,8 +77,9 @@ int serialPortClose(int serial_port){
 }
 
 // Navigation Configuration Parameters
-struct NavConfig {
+struct NavConfig{
     int baseSpeed = 64;              // Base forward speed (0-128)
+    int turnSpeed = 32;              // Speed during turns (0-128)
     int turnStrength = 45;           // Turn angle in degrees from center (90)
     int obstacleThreshold = 10;      // Percentage threshold for obstacle detection
     int regionWidth = 3;             // Number of regions to divide the image into
@@ -88,10 +89,18 @@ struct NavConfig {
     int maxDisparity = 128;          // Maximum disparity value
     double baseline = 60.0;          // Camera baseline in mm
     double focalLength = 560.0;      // Focal length in pixels
+    int commandDelay = 500;          // Delay between commands in milliseconds
+};
+
+struct NavCommand{
+    string steeringCmd;
+    string movementCmd;
+    bool needsExecution;
+    string description;
 };
 
 string decideNavigation(const Mat& obstacleImage, const Mat& disparityImage, 
-                     const NavConfig& config, int rows, int cols){
+                        const NavConfig& config, int rows, int cols){
     
     // Define regions of interest for obstacle detection
     int regionWidth = cols / config.regionWidth;
@@ -102,7 +111,7 @@ string decideNavigation(const Mat& obstacleImage, const Mat& disparityImage,
     
     // Arrays to store obstacle counts for each region
     vector<int> obstacleCounts(config.regionWidth, 0);
-    vector<double> minDistances(config.regionWidth, 99999.0); // Initialize with high values
+    vector<double> minDistances(config.regionWidth, 99999.0);
     
     // Scan for obstacles in each region
     for(int region = 0; region < config.regionWidth; region++){
@@ -131,48 +140,80 @@ string decideNavigation(const Mat& obstacleImage, const Mat& disparityImage,
     for(int region = 0; region < config.regionWidth; region++){
         obstructed[region] = (obstacleCounts[region] > pixelThreshold) || (minDistances[region] < config.stopDistance);
     }
-    
-    // Shorthand for easier reading if using 3 regions
+
     bool leftObstructed = obstructed[0];
     bool centerObstructed = (config.regionWidth >= 3) ? obstructed[1] : false;
     bool rightObstructed = obstructed[config.regionWidth - 1];
     
-    // Calculate turn angles for commands
+    // turn angles
     int leftTurnAngle = 90 - config.turnStrength;
     int rightTurnAngle = 90 + config.turnStrength;
     
-    // Format commands with proper formatting
-    char forwardCmd[8], leftCmd[8], rightCmd[8], stopCmd[8];
-    sprintf(forwardCmd, "FWD%03d\n", config.baseSpeed);
+    // Formatting
+    char centerCmd[8], leftCmd[8], rightCmd[8];
+    char forwardCmd[8], slowForwardCmd[8], stopCmd[8];
+    sprintf(centerCmd, "STR090\n");
     sprintf(leftCmd, "STR%03d\n", leftTurnAngle);
     sprintf(rightCmd, "STR%03d\n", rightTurnAngle);
+    sprintf(forwardCmd, "FWD%03d\n", config.baseSpeed);
+    sprintf(slowForwardCmd, "FWD%03d\n", config.baseSpeed / 2);
     sprintf(stopCmd, "STP000\n");
     
     // Decision tree
-    string decision;
+    NavCommand command;
+    command.needsExecution = true;
 
-    if(!leftObstructed && !centerObstructed && !rightObstructed) decision = forwardCmd;
-    else if(!centerObstructed){
-        if(config.regionWidth >= 3 && minDistances[1] < config.slowDistance){
-            int adjustedSpeed = config.baseSpeed / 2;
-            char slowCmd[8];
-            sprintf(slowCmd, "FWD%03d\n", adjustedSpeed);
-            decision = slowCmd;
-        } else decision = forwardCmd;
+    if(!leftObstructed && !centerObstructed && !rightObstructed){
+        command.steeringCmd = centerCmd;
+        command.movementCmd = forwardCmd;
+        command.description = "All clear - moving forward";
+    } else if(!centerObstructed){
+        if(config.regionWidth >= 3 && minDistances[1] < config.slowDistance) {
+            command.steeringCmd = centerCmd;
+            command.movementCmd = slowForwardCmd;
+            command.description = "Obstacle approaching - slowing down";
+        } else{
+            command.steeringCmd = centerCmd;
+            command.movementCmd = forwardCmd;
+            command.description = "Center clear - moving forward";
+        }
     } else if(!leftObstructed && !rightObstructed){
-        if(minDistances[0] >= minDistances[config.regionWidth-1]) decision = leftCmd;
-        else decision = rightCmd;
-    } else if(!leftObstructed) decision = leftCmd;
-    else if(!rightObstructed) decision = rightCmd;
-    else decision = stopCmd;
+        if(minDistances[0] >= minDistances[config.regionWidth-1]){
+            // Left has more space
+            command.steeringCmd = leftCmd;
+            command.movementCmd = forwardCmd;
+            command.description = "Turning left and moving forward";
+        } else{
+            // Right has more space
+            command.steeringCmd = rightCmd;
+            command.movementCmd = forwardCmd;
+            command.description = "Turning right and moving forward";
+        }
+    } else if(!leftObstructed){
+        // Only left is clear
+        command.steeringCmd = leftCmd;
+        command.movementCmd = forwardCmd;
+        command.description = "Turning left and moving forward";
+    } else if(!rightObstructed){
+        // Only right is clear
+        command.steeringCmd = rightCmd;
+        command.movementCmd = forwardCmd;
+        command.description = "Turning right and moving forward";
+    } else{
+        command.steeringCmd = centerCmd;
+        command.movementCmd = stopCmd;
+        command.description = "All paths blocked - stopping";
+    }
 
-    return decision;
+    cout << command.description << endl;
+    return command;
 }
 
 int main(int argc, char** argv){
 
     NavConfig config;
     config.baseSpeed = 64;             
+    config.turnSpeed = 32;
     config.turnStrength = 45;         
     config.obstacleThreshold = 10;     
     config.regionWidth = 3;             
@@ -182,6 +223,7 @@ int main(int argc, char** argv){
     config.maxDisparity = 128;
     config.baseline = 60.0;            
     config.focalLength = 560.0;    
+    config.commandDelay = 500; 
     
     int fps = 30;
     int frameDelay = 1000/fps;
@@ -198,9 +240,6 @@ int main(int argc, char** argv){
     Mat rectifiedLeft, rectifiedRight;
     Mat medianDisparity, guassianDisparity;
     Mat depthImage = Mat::zeros(rows,cols, CV_8UC1);
-
-    double obstacleThreshold = 100;
-    int baseSpeed = 64;
 
     // serial port things:
     int serialPort = serialPortOpen();
@@ -290,15 +329,18 @@ int main(int argc, char** argv){
         medianBlur(obstacleImage, filteredObstacles, 11);
         dilate(filteredObstacles, filteredObstacles, Mat(), Point(-1, -1), 2);
 
-        string command = decideNavigation(filteredObstacles, disparityImage, config, rows, cols);
+        NavCommand command = decideNavigation(filteredObstacles, disparityImage, config, rows, cols);
 
         // Display
         imshow("depth", guassianDisparity);
         imshow("obstacles", filteredObstacles);
         
-        // Send command to motor controller if serial port is open
-        if(serialPort >= 0) serialPortWrite(command.c_str(), serialPort);
-
+        // Send commands to motor controller if serial port is open
+        if(serialPort >= 0 && command.needsExecution){
+            serialPortWrite(command.steeringCmd.c_str(), serialPort);
+            waitKey(config.commandDelay);
+            serialPortWrite(command.movementCmd.c_str(), serialPort);
+        }
         // display depth map
         hconcat(rectifiedLeft, rectifiedRight,both);
         imshow("Left and Right",both);
