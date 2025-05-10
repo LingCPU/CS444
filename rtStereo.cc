@@ -290,14 +290,14 @@ int main(int argc, char** argv){
         medianBlur(obstacleImage, filteredObstacles, 11);
         dilate(filteredObstacles, filteredObstacles, Mat(), Point(-1, -1), 2);
 
-        string command = decideNavigation(filteredObstacles, disparityImage, config, command);
+        string command = decideNavigation(filteredObstacles, disparityImage, config, rows, cols);
 
         // Display
         imshow("depth", guassianDisparity);
         imshow("obstacles", filteredObstacles);
         
         // Send command to motor controller if serial port is open
-        if(serialPort >= 0) serialPortWrite(command, serialPort);
+        if(serialPort >= 0) serialPortWrite(command.c_str(), serialPort);
 
         // display depth map
         hconcat(rectifiedLeft, rectifiedRight,both);
