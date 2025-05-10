@@ -99,7 +99,7 @@ struct NavCommand{
     string description;
 };
 
-string decideNavigation(const Mat& obstacleImage, const Mat& disparityImage, 
+NavCommand decideNavigation(const Mat& obstacleImage, const Mat& disparityImage, 
                         const NavConfig& config, int rows, int cols){
     
     // Define regions of interest for obstacle detection
@@ -166,46 +166,37 @@ string decideNavigation(const Mat& obstacleImage, const Mat& disparityImage,
     if(!leftObstructed && !centerObstructed && !rightObstructed){
         command.steeringCmd = centerCmd;
         command.movementCmd = forwardCmd;
-        command.description = "All clear - moving forward";
     } else if(!centerObstructed){
         if(config.regionWidth >= 3 && minDistances[1] < config.slowDistance) {
             command.steeringCmd = centerCmd;
             command.movementCmd = slowForwardCmd;
-            command.description = "Obstacle approaching - slowing down";
         } else{
             command.steeringCmd = centerCmd;
             command.movementCmd = forwardCmd;
-            command.description = "Center clear - moving forward";
         }
     } else if(!leftObstructed && !rightObstructed){
         if(minDistances[0] >= minDistances[config.regionWidth-1]){
             // Left has more space
             command.steeringCmd = leftCmd;
             command.movementCmd = forwardCmd;
-            command.description = "Turning left and moving forward";
         } else{
             // Right has more space
             command.steeringCmd = rightCmd;
             command.movementCmd = forwardCmd;
-            command.description = "Turning right and moving forward";
         }
     } else if(!leftObstructed){
         // Only left is clear
         command.steeringCmd = leftCmd;
         command.movementCmd = forwardCmd;
-        command.description = "Turning left and moving forward";
     } else if(!rightObstructed){
         // Only right is clear
         command.steeringCmd = rightCmd;
         command.movementCmd = forwardCmd;
-        command.description = "Turning right and moving forward";
     } else{
         command.steeringCmd = centerCmd;
         command.movementCmd = stopCmd;
-        command.description = "All paths blocked - stopping";
     }
 
-    cout << command.description << endl;
     return command;
 }
 
