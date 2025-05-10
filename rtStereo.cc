@@ -188,7 +188,7 @@ int main(int argc, char** argv){
     int rows = 480;
     int cols = 640;
     
-    double minZ = baseline * focalLength / (double)maxDisparity;
+    double minZ = config.baseline * config.focalLength / config.(double)maxDisparity;
     double maxZ = 500.0; // mm
 
     Mat disparityImage = Mat::zeros(rows, cols, CV_8UC1);
