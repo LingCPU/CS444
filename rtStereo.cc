@@ -95,7 +95,6 @@ struct NavConfig{
 struct NavCommand{
     string steeringCmd;
     string movementCmd;
-    bool needsExecution;
     string description;
 };
 
@@ -161,7 +160,6 @@ NavCommand decideNavigation(const Mat& obstacleImage, const Mat& disparityImage,
     
     // Decision tree
     NavCommand command;
-    command.needsExecution = true;
 
     if(!leftObstructed && !centerObstructed && !rightObstructed){
         command.steeringCmd = centerCmd;
@@ -203,8 +201,8 @@ NavCommand decideNavigation(const Mat& obstacleImage, const Mat& disparityImage,
 int main(int argc, char** argv){
 
     NavConfig config;
-    config.baseSpeed = 64;             
-    config.turnSpeed = 32;
+    config.baseSpeed = 80;             
+    config.turnSpeed = 40;
     config.turnStrength = 45;         
     config.obstacleThreshold = 10;     
     config.regionWidth = 3;             
@@ -327,9 +325,8 @@ int main(int argc, char** argv){
         imshow("obstacles", filteredObstacles);
         
         // Send commands to motor controller if serial port is open
-        if(serialPort >= 0 && command.needsExecution){
+        if(serialPort >= 0){
             serialPortWrite(command.steeringCmd.c_str(), serialPort);
-            waitKey(config.commandDelay);
             serialPortWrite(command.movementCmd.c_str(), serialPort);
         }
         // display depth map
