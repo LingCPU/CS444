@@ -81,10 +81,10 @@ int main(int argc, char** argv){
     int fps = 60; // in frames per sec
     int frameDelay = 1000/(2*fps); // in millisec 
     int maxDisparity = 128;
-    double maxDistance = 5000.0; // mm
     double baseline = 60.0;
     double focalLength = 578.0;
-    double minDistance = baseline * focalLength / (double)maxDisparity;
+    double minZ = baseline * focalLength / (double)maxDisparity;
+    double maxZ = 2000.0; // mm
     int rows  = 480;
     int cols  = 640;
 
@@ -92,7 +92,7 @@ int main(int argc, char** argv){
     Mat obstacleImage = Mat::zeros(rows, cols, CV_8UC1);
     Mat filteredObstacles = Mat::zeros(rows, cols, CV_8UC1);
     Mat leftFrame, rightFrame, both;
-    Mat rectifiedLeft, recctifiedRight;
+    Mat rectifiedLeft, rectifiedRight;
     Mat medianDisparity, guassianDisparity;
     Mat depthImage = Mat::zeros(rows,cols, CV_8UC1);
 
@@ -170,8 +170,22 @@ int main(int argc, char** argv){
 
         // Smooth the depth image
         medianBlur(disparityImage, medianDisparity, 5);
-        GuassianBlur(medianDisparity, guassianDisparity, Size(5, 5), 0);
+        GaussianBlur(medianDisparity, guassianDisparity, Size(5, 5), 0);
+
+        double disparity;
+        double z; // distance from camera
+        for(int row = 0; row < rows; row++){
+            for(int col = 0; col < cols; col++){
+                disparity = (double)(disparityImage.at<unsigned char>(row, col));
+                z = baseline * focalLength / disparity;
+                if(z > minZ && z < maxZ) obstacleImage.at<unsigned char>(row, col) = 255;
+                else obstacleImage.at<unsigned char>(row, col) = 0;
+            }
+        }
+
+        // Display
         imshow("depth", guassianDisparity);
+        imshow("obstacles", obstacleImage);
 
         // Detect obstacles and determine safe direction
         bool leftClear, centerClear, rightClear;
@@ -183,7 +197,6 @@ int main(int argc, char** argv){
         if(serialPort >= 0) serialPortWrite(command, serialPort);
 
         // display depth map
-        imshow("Depth",medianFiltered);
         hconcat(rectifiedLeft, rectifiedRight,both);
         imshow("Left and Right",both);
     
