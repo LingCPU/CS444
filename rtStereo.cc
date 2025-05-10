@@ -177,7 +177,7 @@ int main(int argc, char** argv){
         for(int row = 0; row < rows; row++){
             for(int col = 0; col < cols; col++){
                 disparity = (double)(disparityImage.at<unsigned char>(row, col));
-                if(dispairty > 0) z = baseline * focalLength / disparity;
+                if(disparity > 0) z = baseline * focalLength / disparity;
                 else z = 0;
                 if(z > minZ && z < maxZ) obstacleImage.at<unsigned char>(row, col) = 255;
                 else obstacleImage.at<unsigned char>(row, col) = 0;
