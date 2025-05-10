@@ -84,7 +84,7 @@ int main(int argc, char** argv){
     double baseline = 60.0;
     double focalLength = 578.0;
     double minZ = baseline * focalLength / (double)maxDisparity;
-    double maxZ = 2000.0; // mm
+    double maxZ = 500.0; // mm
     int rows  = 480;
     int cols  = 640;
 
@@ -177,15 +177,19 @@ int main(int argc, char** argv){
         for(int row = 0; row < rows; row++){
             for(int col = 0; col < cols; col++){
                 disparity = (double)(disparityImage.at<unsigned char>(row, col));
-                z = baseline * focalLength / disparity;
+                if(dispairty > 0) z = baseline * focalLength / disparity;
+                else z = 0;
                 if(z > minZ && z < maxZ) obstacleImage.at<unsigned char>(row, col) = 255;
                 else obstacleImage.at<unsigned char>(row, col) = 0;
             }
         }
 
+        // filter obstacle images to eliminate false matches
+        medianBlur(obstacleImage, filteredObstacles, 15);
+
         // Display
         imshow("depth", guassianDisparity);
-        imshow("obstacles", obstacleImage);
+        imshow("obstacles", filteredObstacles);
 
         // Detect obstacles and determine safe direction
         bool leftClear, centerClear, rightClear;
