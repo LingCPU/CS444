@@ -188,7 +188,7 @@ int main(int argc, char** argv){
     int rows = 480;
     int cols = 640;
     
-    double minZ = config.baseline * config.focalLength / config.(double)maxDisparity;
+    double minZ = config.baseline * config.focalLength / (double)config.maxDisparity;
     double maxZ = 500.0; // mm
 
     Mat disparityImage = Mat::zeros(rows, cols, CV_8UC1);
@@ -269,7 +269,7 @@ int main(int argc, char** argv){
         remap(rightFrame, rectifiedRight, map2x, map2y, INTER_LINEAR);
 
         // Compute depth image
-        stereoDepth(&rectifiedLeft, &rectifiedRight, &disparityImage, maxDisparity, rows, cols);
+        stereoDepth(&rectifiedLeft, &rectifiedRight, &disparityImage, config.maxDisparity, rows, cols);
 
         // Smooth the depth image
         medianBlur(disparityImage, medianDisparity, 5);
