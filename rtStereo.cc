@@ -76,17 +76,151 @@ int serialPortClose(int serial_port){
     return close(serial_port);
 }
 
+// Navigation Configuration Parameters
+struct NavConfig{
+    int baseSpeed = 64;              // Base forward speed (0-128)
+    int turnSpeed = 32;              // Speed during turns (0-128)
+    int turnStrength = 45;           // Turn angle in degrees from center (90)
+    int obstacleThreshold = 10;      // Percentage threshold for obstacle detection
+    int regionWidth = 3;             // Number of regions to divide the image into
+    double scanHeightPercentage = 0.4; // Percentage of image from bottom to scan
+    int stopDistance = 20;           // Minimum safe distance in cm
+    int slowDistance = 50;           // Distance at which to slow down in cm
+    int maxDisparity = 128;          // Maximum disparity value
+    double baseline = 60.0;          // Camera baseline in mm
+    double focalLength = 560.0;      // Focal length in pixels
+    int commandDelay = 500;          // Delay between commands in milliseconds
+};
+
+struct NavCommand{
+    string steeringCmd;
+    string movementCmd;
+    string description;
+};
+
+NavCommand decideNavigation(const Mat& obstacleImage, const Mat& disparityImage, 
+                        const NavConfig& config, int rows, int cols){
+    
+    // Define regions of interest for obstacle detection
+    int regionWidth = cols / config.regionWidth;
+    int scanStartRow = rows * (1.0 - config.scanHeightPercentage);
+    
+    // Calculate obstacle detection thresholds
+    int pixelThreshold = regionWidth * (rows - scanStartRow) * (config.obstacleThreshold / 100.0);
+    
+    // Arrays to store obstacle counts for each region
+    vector<int> obstacleCounts(config.regionWidth, 0);
+    vector<double> minDistances(config.regionWidth, 99999.0);
+    
+    // Scan for obstacles in each region
+    for(int region = 0; region < config.regionWidth; region++){
+        int regionStart = region * regionWidth;
+        int regionEnd = (region + 1) * regionWidth;
+        
+        // Count obstacles in this region
+        for(int row = scanStartRow; row < rows; row++){
+            for(int col = regionStart; col < regionEnd && col < cols; col++){
+                if(obstacleImage.at<unsigned char>(row, col) > 0){
+                    obstacleCounts[region]++;
+                    
+                    // Calculate distance for this pixel from disparity
+                    double disparity = disparityImage.at<unsigned char>(row, col);
+                    if(disparity > 0){
+                        double distance = config.baseline * config.focalLength / disparity;
+                        if(distance < minDistances[region]) minDistances[region] = distance;
+                    }
+                }
+            }
+        }
+    }
+
+    // Determine which regions are obstructed
+    vector<bool> obstructed(config.regionWidth, false);
+    for(int region = 0; region < config.regionWidth; region++){
+        obstructed[region] = (obstacleCounts[region] > pixelThreshold) || (minDistances[region] < config.stopDistance);
+    }
+
+    bool leftObstructed = obstructed[0];
+    bool centerObstructed = (config.regionWidth >= 3) ? obstructed[1] : false;
+    bool rightObstructed = obstructed[config.regionWidth - 1];
+    
+    // turn angles
+    int leftTurnAngle = 90 - config.turnStrength;
+    int rightTurnAngle = 90 + config.turnStrength;
+    
+    // Formatting
+    char centerCmd[8], leftCmd[8], rightCmd[8];
+    char forwardCmd[8], slowForwardCmd[8], stopCmd[8];
+    sprintf(centerCmd, "STR090\n");
+    sprintf(leftCmd, "STR%03d\n", leftTurnAngle);
+    sprintf(rightCmd, "STR%03d\n", rightTurnAngle);
+    sprintf(forwardCmd, "FWD%03d\n", config.baseSpeed);
+    sprintf(slowForwardCmd, "FWD%03d\n", config.baseSpeed / 2);
+    sprintf(stopCmd, "STP000\n");
+    
+    // Decision tree
+    NavCommand command;
+
+    if(!leftObstructed && !centerObstructed && !rightObstructed){
+        command.steeringCmd = centerCmd;
+        command.movementCmd = forwardCmd;
+    } else if(!centerObstructed){
+        if(config.regionWidth >= 3 && minDistances[1] < config.slowDistance) {
+            command.steeringCmd = centerCmd;
+            command.movementCmd = slowForwardCmd;
+        } else{
+            command.steeringCmd = centerCmd;
+            command.movementCmd = forwardCmd;
+        }
+    } else if(!leftObstructed && !rightObstructed){
+        if(minDistances[0] >= minDistances[config.regionWidth-1]){
+            // Left has more space
+            command.steeringCmd = leftCmd;
+            command.movementCmd = forwardCmd;
+        } else{
+            // Right has more space
+            command.steeringCmd = rightCmd;
+            command.movementCmd = forwardCmd;
+        }
+    } else if(!leftObstructed){
+        // Only left is clear
+        command.steeringCmd = leftCmd;
+        command.movementCmd = forwardCmd;
+    } else if(!rightObstructed){
+        // Only right is clear
+        command.steeringCmd = rightCmd;
+        command.movementCmd = forwardCmd;
+    } else{
+        command.steeringCmd = centerCmd;
+        command.movementCmd = stopCmd;
+    }
+
+    return command;
+}
+
 int main(int argc, char** argv){
 
-    int fps = 60; // in frames per sec
-    int frameDelay = 1000/(2*fps); // in millisec 
-    int maxDisparity = 128;
-    double baseline = 60.0;
-    double focalLength = 578.0;
-    double minZ = baseline * focalLength / (double)maxDisparity;
+    NavConfig config;
+    config.baseSpeed = 80;             
+    config.turnSpeed = 40;
+    config.turnStrength = 45;         
+    config.obstacleThreshold = 10;     
+    config.regionWidth = 3;             
+    config.scanHeightPercentage = 0.4;  
+    config.stopDistance = 200;        
+    config.slowDistance = 500;        
+    config.maxDisparity = 128;
+    config.baseline = 60.0;            
+    config.focalLength = 560.0;    
+    config.commandDelay = 500; 
+    
+    int fps = 30;
+    int frameDelay = 1000/fps;
+    int rows = 480;
+    int cols = 640;
+    
+    double minZ = config.baseline * config.focalLength / (double)config.maxDisparity;
     double maxZ = 500.0; // mm
-    int rows  = 480;
-    int cols  = 640;
 
     Mat disparityImage = Mat::zeros(rows, cols, CV_8UC1);
     Mat obstacleImage = Mat::zeros(rows, cols, CV_8UC1);
@@ -95,9 +229,6 @@ int main(int argc, char** argv){
     Mat rectifiedLeft, rectifiedRight;
     Mat medianDisparity, guassianDisparity;
     Mat depthImage = Mat::zeros(rows,cols, CV_8UC1);
-
-    double obstacleThreshold = 100;
-    int baseSpeed = 64;
 
     // serial port things:
     int serialPort = serialPortOpen();
@@ -166,40 +297,38 @@ int main(int argc, char** argv){
         remap(rightFrame, rectifiedRight, map2x, map2y, INTER_LINEAR);
 
         // Compute depth image
-        stereoDepth(&rectifiedLeft, &rectifiedRight, &disparityImage, maxDisparity, rows, cols);
+        stereoDepth(&rectifiedLeft, &rectifiedRight, &disparityImage, config.maxDisparity, rows, cols);
 
         // Smooth the depth image
         medianBlur(disparityImage, medianDisparity, 5);
         GaussianBlur(medianDisparity, guassianDisparity, Size(5, 5), 0);
 
-        double disparity;
-        double z; // distance from camera
         for(int row = 0; row < rows; row++){
             for(int col = 0; col < cols; col++){
-                disparity = (double)(disparityImage.at<unsigned char>(row, col));
-                if(disparity > 0) z = baseline * focalLength / disparity;
-                else z = 0;
-                if(z > minZ && z < maxZ) obstacleImage.at<unsigned char>(row, col) = 255;
-                else obstacleImage.at<unsigned char>(row, col) = 0;
+                double disparity = (double)(disparityImage.at<unsigned char>(row, col));
+                if(disparity > 0){
+                    double distance = config.baseline * config.focalLength / disparity;
+                    if(distance > minZ && distance < maxZ) obstacleImage.at<unsigned char>(row, col) = 255;
+                    else obstacleImage.at<unsigned char>(row, col) = 0;
+                } else obstacleImage.at<unsigned char>(row, col) = 0;
             }
         }
 
         // filter obstacle images to eliminate false matches
-        medianBlur(obstacleImage, filteredObstacles, 15);
+        medianBlur(obstacleImage, filteredObstacles, 11);
+        dilate(filteredObstacles, filteredObstacles, Mat(), Point(-1, -1), 2);
+
+        NavCommand command = decideNavigation(filteredObstacles, disparityImage, config, rows, cols);
 
         // Display
         imshow("depth", guassianDisparity);
         imshow("obstacles", filteredObstacles);
-
-        // Detect obstacles and determine safe direction
-        bool leftClear, centerClear, rightClear;
-              
-        // Generate motor command based on obstacle detection
-        char command[8];
         
-        // Send command to motor controller if serial port is open
-        if(serialPort >= 0) serialPortWrite(command, serialPort);
-
+        // Send commands to motor controller if serial port is open
+        if(serialPort >= 0){
+            serialPortWrite(command.steeringCmd.c_str(), serialPort);
+            serialPortWrite(command.movementCmd.c_str(), serialPort);
+        }
         // display depth map
         hconcat(rectifiedLeft, rectifiedRight,both);
         imshow("Left and Right",both);
